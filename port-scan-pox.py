@@ -42,6 +42,14 @@ class MySwitch(object):
 		tcp_seg = packet.next.next
 		srcport = tcp_seg.srcport
 		dstport = tcp_seg.dstport
+		# install a two drop rules
+		# considering that our firewall blocks all src-dst trafic
+		# we install rule base on ip, so all ip packets destined to dst will be dropped
+		# we also install a rule for dropping layer two frames
+		# PS: we can much just by the second one, we added the first one just in case
+		# the scanner changes his mac addr
+		# Inside the drop, we could also iterate over all available connections, and drop packets
+		# which match with (src_ip,dst_ip)
 		def drop ():
         		msg = of.ofp_flow_mod()
 			msg.match.dl_type = 0x800
@@ -55,7 +63,7 @@ class MySwitch(object):
 			msg.match.dl_dst = packet.dst
 			msg.priority = 32800
 			self.connections[dpid].send(msg)
-			log.info("Set a new drop rule for src : {}".format(ip_from))
+			log.info("Set a new drop rule for src : {} - {}".format(ip_from, ip_to))
 
 		if (str(ip_from), str(ip_to)) not in self.tcp_destport:
 			self.tcp_destport[(str(ip_from), str(ip_to))] = {}
@@ -133,11 +141,9 @@ class MySwitch(object):
            			msg = of.ofp_packet_out()
         		msg.actions.append(of.ofp_action_output(port = of.OFPP_FLOOD))
         		msg.data = packet_in
-        		log.debug("sending : {}".format(msg))
-        		log.debug("flooding packet : mac :  {} -- in_port : {}".format(str(mac_src), in_port))
         		self.connections[dpid].send(msg)
-		
     		if mac_dst.is_multicast:
+			#broadcast addr
         		broadcast(False)
 			return
 		
@@ -148,7 +154,6 @@ class MySwitch(object):
         		out_port = self.mac_to_port[dpid][str(mac_dst)]
         		msg.actions.append(of.ofp_action_output(port = out_port))
         		msg.data = packet_in
-        		log.info("sending : {}".format(msg))
         		log.info("-------->installing flow entry {}:{}-> {}".format(str(mac_src),str(mac_dst), out_port))
         		self.connections[dpid].send(msg)
                 	
